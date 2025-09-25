@@ -117,7 +117,7 @@ public class DictionaryConnection {
             }
 
             String firstline = input.readLine();
-            if (firstline.startsWith("552")) {
+            if (firstline.startsWith("552") || firstline.startsWith("550") || firstline.startsWith("551")) {
                 return set;
             }
 
@@ -127,7 +127,6 @@ public class DictionaryConnection {
 
             String line;
             while ((line = input.readLine()) != null) {
-                line = line.trim();
                 if (line.startsWith("250")) {
                     break;
                 }
@@ -139,10 +138,11 @@ public class DictionaryConnection {
                     String dbName = splits[2];
                     currentDefinition = new Definition(serverWord, dbName);
                     set.add(currentDefinition);
-                } else {
-                    if (currentDefinition != null) {
-                        currentDefinition.appendDefinition(line);
-                    }
+                } else if (currentDefinition != null) {
+                    // server sends: This is a line.\r\n
+                    // inputreadline: "This is a line.\r"
+                    // replaceall: "This is a line."
+                    currentDefinition.appendDefinition(line.replaceAll("\r$", ""));
                 }
             }
         } catch (Exception e) {
@@ -172,7 +172,7 @@ public class DictionaryConnection {
             }
 
             String firstline = input.readLine();
-            if (firstline.startsWith("552")) {
+            if (firstline.startsWith("552") || firstline.startsWith("550") || firstline.startsWith("551")) {
                 return set;
             }
 
@@ -214,6 +214,11 @@ public class DictionaryConnection {
             }
 
             String firstline = input.readLine();
+
+            if (firstline.startsWith("554")) {
+                return databaseMap;
+            }
+
             if (firstline == null || !firstline.startsWith("110")) {
                 throw new DictConnectionException("unexpected response: " + firstline);
             }
@@ -254,6 +259,10 @@ public class DictionaryConnection {
             }
 
             String firstline = input.readLine();
+
+            if (firstline.startsWith("555")) {
+                return set;
+            }
             if (firstline == null || !firstline.startsWith("111")) {
                 throw new DictConnectionException("unexpected response: " + firstline);
             }
