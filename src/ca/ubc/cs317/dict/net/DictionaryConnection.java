@@ -109,28 +109,45 @@ public class DictionaryConnection {
      */
     public synchronized Collection<Definition> getDefinitions(String word, Database database) throws DictConnectionException {
         Collection<Definition> set = new ArrayList<>();
+        Definition currentDefinition = null;
         try {
             if (output != null) {
-                output.println("define " + database.getName() + " " + word);
+                output.println("DEFINE " + database.getName() + " " + word);
                 output.flush();
             }
 
-            String response = input.readLine();
-            if (response == null) {
-                throw new DictConnectionException("No response received from server");
+            String firstline = input.readLine();
+            if (firstline.startsWith("552")) {
+                return set;
             }
 
-            if (!response.startsWith("150")) {
-                throw new DictConnectionException("Unexpected response: " + response);
+            if (firstline == null || !firstline.startsWith("150")) {
+                throw new DictConnectionException("unexpected response: " + firstline);
             }
 
+            String line;
+            while ((line = input.readLine()) != null) {
+                line = line.trim();
+                if (line.startsWith("250")) {
+                    break;
+                }
 
-
-
+                if (line.startsWith("151")) {
+                    // Format: 151 "word" dbName "database description"
+                    String[] splits = line.split("\\s", 4);
+                    String serverWord = splits[1].replaceAll("^\"|\"$", "");
+                    String dbName = splits[2];
+                    currentDefinition = new Definition(serverWord, dbName);
+                    set.add(currentDefinition);
+                } else {
+                    if (currentDefinition != null) {
+                        currentDefinition.appendDefinition(line);
+                    }
+                }
+            }
         } catch (Exception e) {
-            throw new DictConnectionException("Not implemented");
+            throw new DictConnectionException("Error", e);
         }
-        // TODO Add your code here
 
         return set;
     }
@@ -148,7 +165,37 @@ public class DictionaryConnection {
     public synchronized Set<String> getMatchList(String word, MatchingStrategy strategy, Database database) throws DictConnectionException {
         Set<String> set = new LinkedHashSet<>();
 
-        // TODO Add your code here
+        try {
+            if (output != null) {
+                output.println("MATCH " + database.getName() + " " + strategy.getName() + " " + word);
+                output.flush();
+            }
+
+            String firstline = input.readLine();
+            if (firstline.startsWith("552")) {
+                return set;
+            }
+
+            if (firstline == null || !firstline.startsWith("152")) {
+                throw new DictConnectionException("unexpected response: " + firstline);
+            }
+
+            String line;
+            while ((line = input.readLine()) != null) {
+                if (line.startsWith("250")) {
+                    break;
+                }
+
+                line = line.trim();
+                if (line.matches("^[^ ]+\\s+\".*\"$")) {
+                    String[] split = line.split("\\s+", 2);
+                    String matchWord = split[1].replaceAll("^\"|\"$", "");
+                    set.add(matchWord);
+                }
+            }
+        } catch (Exception e) {
+            throw new DictConnectionException("Error", e);
+        }
 
         return set;
     }
@@ -160,7 +207,6 @@ public class DictionaryConnection {
      */
     public synchronized Map<String, Database> getDatabaseList() throws DictConnectionException {
         Map<String, Database> databaseMap = new HashMap<>();
-        List<String> response = new ArrayList<>();
         try {
             if (output != null) {
                 output.println("SHOW DATABASES");
@@ -177,15 +223,12 @@ public class DictionaryConnection {
                 if (line.startsWith("250")) {
                     break;
                 }
-                response.add(line);
-            }
 
-            for (String s : response) {
-                s = s.trim();
-                if (s.matches("^[^ ]+\\s+\".*\"$")) {
-                    String[] split = s.split("\\s+", 2);
+                line = line.trim();
+                if (line.matches("^[^ ]+\\s+\".*\"$")) {
+                    String[] split = line.split("\\s+", 2);
                     String dbName = split[0];
-                    String dbDescription = split[1].replaceAll("^\"|\"$", ""); //remove "" at beginning and end
+                    String dbDescription = split[1].replaceAll("^\"|\"$", "");
                     databaseMap.put(dbName, new Database(dbName, dbDescription));
                 }
             }
@@ -204,8 +247,35 @@ public class DictionaryConnection {
      */
     public synchronized Set<MatchingStrategy> getStrategyList() throws DictConnectionException {
         Set<MatchingStrategy> set = new LinkedHashSet<>();
+        try {
+            if (output != null) {
+                output.println("SHOW STRAT");
+                output.flush();
+            }
 
-        // TODO Add your code here
+            String firstline = input.readLine();
+            if (firstline == null || !firstline.startsWith("111")) {
+                throw new DictConnectionException("unexpected response: " + firstline);
+            }
+
+            String line;
+            while ((line = input.readLine()) != null) {
+                if (line.startsWith("250")) {
+                    break;
+                }
+
+                line = line.trim();
+                if (line.matches("^[^ ]+\\s+\".*\"$")) {
+                    String[] split = line.split("\\s+", 2);
+                    String strategyName = split[0];
+                    String strategyDescription = split[1].replaceAll("^\"|\"$", "");
+                    set.add(new MatchingStrategy(strategyName, strategyDescription));
+                }
+            }
+
+        } catch (IOException e) {
+            throw new DictConnectionException("Error communicating with server", e);
+        }
 
         return set;
     }
