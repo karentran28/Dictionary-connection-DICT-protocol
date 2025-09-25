@@ -5,6 +5,7 @@ import ca.ubc.cs317.dict.model.Definition;
 import ca.ubc.cs317.dict.model.MatchingStrategy;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
@@ -34,7 +35,11 @@ public class DictionaryConnection {
     public DictionaryConnection(String host, int port) throws DictConnectionException {
         try{
             socket = new Socket(host, port);
+
+            //writes to server
             PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+
+            //listens to serve
             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             this.input = in;
             this.output = out;
@@ -44,6 +49,7 @@ public class DictionaryConnection {
                 throw new DictConnectionException("No welcome message received from server");
             }
 
+            //220 dict.dict.org dictd 1.12.1/rf on Linux 4.19.0-10-amd64 <auth.mime> <547903076.14484.1758085096@dict.dict.org>
             if (!welcomeMessage.startsWith("220")) {
                 throw new DictConnectionException("Unexpected welcome message: " + welcomeMessage);
             }
@@ -75,6 +81,7 @@ public class DictionaryConnection {
         try {
             if (output != null) {
                 output.println("QUIT");
+                //221 bye [d/m/c = 0/0/0; 127.000r 0.000u 0.000s]
                 output.flush();
             }
             if (input != null) {
@@ -102,7 +109,27 @@ public class DictionaryConnection {
      */
     public synchronized Collection<Definition> getDefinitions(String word, Database database) throws DictConnectionException {
         Collection<Definition> set = new ArrayList<>();
+        try {
+            if (output != null) {
+                output.println("define " + database.getName() + " " + word);
+                output.flush();
+            }
 
+            String response = input.readLine();
+            if (response == null) {
+                throw new DictConnectionException("No response received from server");
+            }
+
+            if (!response.startsWith("150")) {
+                throw new DictConnectionException("Unexpected response: " + response);
+            }
+
+
+
+
+        } catch (Exception e) {
+            throw new DictConnectionException("Not implemented");
+        }
         // TODO Add your code here
 
         return set;
@@ -133,8 +160,39 @@ public class DictionaryConnection {
      */
     public synchronized Map<String, Database> getDatabaseList() throws DictConnectionException {
         Map<String, Database> databaseMap = new HashMap<>();
+        List<String> response = new ArrayList<>();
+        try {
+            if (output != null) {
+                output.println("SHOW DATABASES");
+                output.flush();
+            }
 
-        // TODO Add your code here
+            String firstline = input.readLine();
+            if (firstline == null || !firstline.startsWith("110")) {
+                throw new DictConnectionException("unexpected response: " + firstline);
+            }
+
+            String line;
+            while ((line = input.readLine()) != null) {
+                if (line.startsWith("250")) {
+                    break;
+                }
+                response.add(line);
+            }
+
+            for (String s : response) {
+                s = s.trim();
+                if (s.matches("^[^ ]+\\s+\".*\"$")) {
+                    String[] split = s.split("\\s+", 2);
+                    String dbName = split[0];
+                    String dbDescription = split[1].replaceAll("^\"|\"$", ""); //remove "" at beginning and end
+                    databaseMap.put(dbName, new Database(dbName, dbDescription));
+                }
+            }
+
+        } catch (IOException e) {
+            throw new DictConnectionException("Error communicating with server", e);
+        }
 
         return databaseMap;
     }
@@ -160,7 +218,32 @@ public class DictionaryConnection {
     public synchronized String getDatabaseInfo(Database d) throws DictConnectionException {
 	StringBuilder sb = new StringBuilder();
 
-        // TODO Add your code here
+        try {
+            if (output != null) {
+                output.println("SHOW INFO " + d.getName());
+                output.flush();
+            }
+
+            String firstline = input.readLine();
+            if (firstline == null || !firstline.startsWith("112")) {
+                throw new DictConnectionException("unexpected response: " + firstline);
+            }
+
+            String line;
+            while ((line = input.readLine()) != null) {
+                if (line.startsWith("250")) {
+                    break;
+                }
+                sb.append(line).append("\n");
+            }
+
+            if (sb.length() > 0) {
+                sb.setLength(sb.length() - 1);
+            }
+
+        } catch (IOException e) {
+            throw new DictConnectionException("Error communicating with server", e);
+        }
 
         return sb.toString();
     }
